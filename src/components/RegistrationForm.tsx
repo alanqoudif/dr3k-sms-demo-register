@@ -56,7 +56,7 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ language }) 
       });
       localStorage.setItem('registrations', JSON.stringify(submissions));
 
-      // Call the edge function
+      // Call the edge function with timeout
       const { data, error } = await supabase.functions.invoke('send-sms', {
         body: {
           name: formData.name,
@@ -68,7 +68,13 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ language }) 
 
       if (error) {
         console.error('Edge function error:', error);
-        throw error;
+        // Show more specific error message
+        toast({
+          title: error.message || t.errorToast,
+          variant: 'destructive',
+          duration: 5000,
+        });
+        return;
       }
 
       if (data?.ok) {
@@ -80,7 +86,13 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ language }) 
         // Clear form
         setFormData({ name: '', phone: '' });
       } else {
-        throw new Error(data?.error || 'Unknown error');
+        // Show the specific error from the backend
+        const errorMessage = data?.error || 'Unknown error occurred';
+        toast({
+          title: language === 'ar' ? `❌ ${errorMessage}` : `❌ ${errorMessage}`,
+          variant: 'destructive',
+          duration: 5000,
+        });
       }
 
     } catch (error) {

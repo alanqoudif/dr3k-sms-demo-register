@@ -36,37 +36,73 @@ serve(async (req) => {
 
     console.log('Sending SMS to:', phone)
     
-    const response = await fetch('https://automapi.com/api/send', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload)
-    })
+    // Add timeout and better error handling
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 seconds timeout
+    
+    try {
+      const response = await fetch('https://automapi.com/api/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      })
 
-    const result = await response.text()
-    console.log('Automapi response:', result, 'Status:', response.status)
+      clearTimeout(timeoutId)
 
-    if (response.ok) {
-      return new Response(
-        JSON.stringify({ ok: true, message: 'SMS sent successfully' }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      )
-    } else {
-      return new Response(
-        JSON.stringify({ ok: false, error: 'Failed to send SMS' }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      )
+      const result = await response.text()
+      console.log('Automapi response:', result, 'Status:', response.status)
+
+      // Check if response is successful
+      if (response.ok) {
+        return new Response(
+          JSON.stringify({ ok: true, message: 'SMS sent successfully' }),
+          { 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        )
+      } else {
+        // Log the error response for debugging
+        console.error('Automapi error response:', result)
+        return new Response(
+          JSON.stringify({ 
+            ok: false, 
+            error: `SMS service error: ${response.status}. Please try again later.` 
+          }),
+          { 
+            status: 500, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        )
+      }
+    } catch (fetchError) {
+      clearTimeout(timeoutId)
+      console.error('Fetch error:', fetchError)
+      
+      if (fetchError.name === 'AbortError') {
+        return new Response(
+          JSON.stringify({ 
+            ok: false, 
+            error: 'Request timeout. Please check your connection and try again.' 
+          }),
+          { 
+            status: 408, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        )
+      }
+      
+      throw fetchError
     }
   } catch (error) {
     console.error('Error sending SMS:', error)
     return new Response(
-      JSON.stringify({ ok: false, error: 'Internal server error' }),
+      JSON.stringify({ 
+        ok: false, 
+        error: 'Service temporarily unavailable. Please try again later.' 
+      }),
       { 
         status: 500, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
