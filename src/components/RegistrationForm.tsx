@@ -28,7 +28,7 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ language }) 
 
     if (!formData.phone.trim()) {
       newErrors.phone = t.requiredField;
-    } else if (!formData.phone.startsWith('+')) {
+    } else if (!formData.phone.match(/^968\d{8}$/)) {
       newErrors.phone = t.invalidPhone;
     }
 
@@ -60,7 +60,7 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ language }) 
       const { data, error } = await supabase.functions.invoke('send-sms', {
         body: {
           name: formData.name,
-          phone: formData.phone
+          phone: `+${formData.phone}` // Add + when sending to SMS service
         }
       });
 
@@ -115,7 +115,7 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ language }) 
     }
   };
 
-  const isFormValid = formData.name.trim() && formData.phone.trim() && formData.phone.startsWith('+');
+  const isFormValid = formData.name.trim() && formData.phone.trim() && formData.phone.match(/^968\d{8}$/);
 
   return (
     <div className="w-full max-w-md mx-auto">
