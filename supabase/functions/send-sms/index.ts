@@ -36,72 +36,98 @@ serve(async (req) => {
 
     console.log('Sending SMS to:', phone)
     
-    // Add timeout and better error handling
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 seconds timeout
+    // Try multiple times with different timeouts
+    let lastError = null
+    const maxRetries = 2
     
-    try {
-      const response = await fetch('https://automapi.com/api/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      })
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`Attempt ${attempt} of ${maxRetries}`)
+        
+        const controller = new AbortController()
+        const timeoutDuration = attempt === 1 ? 8000 : 15000 // First attempt 8s, second 15s
+        const timeoutId = setTimeout(() => controller.abort(), timeoutDuration)
+        
+        const response = await fetch('https://automapi.com/api/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        })
 
-      clearTimeout(timeoutId)
+        clearTimeout(timeoutId)
 
-      const result = await response.text()
-      console.log('Automapi response:', result, 'Status:', response.status)
+        const result = await response.text()
+        console.log(`Attempt ${attempt} - Automapi response:`, result, 'Status:', response.status)
 
-      // Check if response is successful
-      if (response.ok) {
-        return new Response(
-          JSON.stringify({ ok: true, message: 'SMS sent successfully' }),
-          { 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        // Check if response is successful
+        if (response.ok || response.status === 200) {
+          return new Response(
+            JSON.stringify({ ok: true, message: 'SMS sent successfully' }),
+            { 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          )
+        } else {
+          lastError = `HTTP ${response.status}: ${result}`
+          console.error(`Attempt ${attempt} failed:`, lastError)
+          
+          // If this is the last attempt, return error
+          if (attempt === maxRetries) {
+            break
           }
-        )
-      } else {
-        // Log the error response for debugging
-        console.error('Automapi error response:', result)
-        return new Response(
-          JSON.stringify({ 
-            ok: false, 
-            error: `SMS service error: ${response.status}. Please try again later.` 
-          }),
-          { 
-            status: 500, 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          
+          // Wait before retry (only if not the last attempt)
+          await new Promise(resolve => setTimeout(resolve, 2000))
+        }
+        
+      } catch (fetchError) {
+        console.error(`Attempt ${attempt} error:`, fetchError)
+        lastError = fetchError
+        
+        if (fetchError.name === 'AbortError') {
+          console.log(`Attempt ${attempt} timed out`)
+          if (attempt === maxRetries) {
+            return new Response(
+              JSON.stringify({ 
+                ok: false, 
+                error: 'طلب إرسال الرسالة انتهت صلاحيته. يرجى المحاولة مرة أخرى.' 
+              }),
+              { 
+                status: 408, 
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+              }
+            )
           }
-        )
+          // Wait before retry
+          await new Promise(resolve => setTimeout(resolve, 2000))
+        } else {
+          // For other errors, don't retry
+          break
+        }
       }
-    } catch (fetchError) {
-      clearTimeout(timeoutId)
-      console.error('Fetch error:', fetchError)
-      
-      if (fetchError.name === 'AbortError') {
-        return new Response(
-          JSON.stringify({ 
-            ok: false, 
-            error: 'Request timeout. Please check your connection and try again.' 
-          }),
-          { 
-            status: 408, 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-          }
-        )
-      }
-      
-      throw fetchError
     }
+    
+    // If we get here, all attempts failed
+    return new Response(
+      JSON.stringify({ 
+        ok: false, 
+        error: 'خدمة الرسائل النصية غير متاحة مؤقتاً. يرجى المحاولة لاحقاً.' 
+      }),
+      { 
+        status: 500, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    )
+
   } catch (error) {
     console.error('Error sending SMS:', error)
     return new Response(
       JSON.stringify({ 
         ok: false, 
-        error: 'Service temporarily unavailable. Please try again later.' 
+        error: 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.' 
       }),
       { 
         status: 500, 
