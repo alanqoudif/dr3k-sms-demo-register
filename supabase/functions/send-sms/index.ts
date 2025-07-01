@@ -25,16 +25,19 @@ serve(async (req) => {
       )
     }
 
-    // Automapi credentials (kept secure on server)
+    // Remove the + from phone number if it exists
+    const cleanPhone = phone.replace(/^\+/, '')
+
+    // Automapi credentials and payload
     const payload = {
-      number: phone,
+      number: cleanPhone,
       type: "text",
       message: "تم تسجيلك بنجاح في خدمة DR3K. شكرًا لك!",
       instance_id: "6848073DE839C",
       access_token: "660f1622e1665"
     }
 
-    console.log('Sending SMS to:', phone)
+    console.log('Sending SMS to:', cleanPhone)
     
     // Try multiple times with different timeouts
     let lastError = null

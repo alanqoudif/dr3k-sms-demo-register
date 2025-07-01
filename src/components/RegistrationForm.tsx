@@ -56,11 +56,11 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ language }) 
       });
       localStorage.setItem('registrations', JSON.stringify(submissions));
 
-      // Call the edge function with timeout
+      // Call the edge function - send phone number as is (without +)
       const { data, error } = await supabase.functions.invoke('send-sms', {
         body: {
           name: formData.name,
-          phone: `+${formData.phone}` // Add + when sending to SMS service
+          phone: formData.phone // Send as is without adding +
         }
       });
 
